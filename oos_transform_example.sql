@@ -55,7 +55,7 @@ begin
     select level, dummy from dual
     connect by level < 4
   ;
-  
+
   v_xml1 := oos_transform.refcur2xml(v_rc);
   dbms_output.put_line(v_xml1.getclobval());
 
@@ -64,5 +64,27 @@ begin
 
   v_xml2 := oos_transform.xquery(v_xml1, v_xquery);
   dbms_output.put_line(v_xml2.getclobval());
+end;
+/
+
+declare
+  v_rc sys_refcursor;
+begin
+  open v_rc for
+    select level, dummy, sysdate from dual
+    connect by level < 4
+  ;
+  dbms_output.put_line(oos_transform.refcur2csv(v_rc));
+end;
+/
+
+declare
+  v_rc sys_refcursor;
+begin
+  open v_rc for
+    select level, dummy, sysdate from dual
+    connect by level < 4
+  ;
+  dbms_output.put_line(oos_transform.refcur2csv2(v_rc));
 end;
 /

@@ -8,9 +8,9 @@ create or replace package body oos_transform is
     l_xml xmltype;
   begin
     l_context := dbms_xmlgen.newcontext(p_rc);
-   
+
     dbms_xmlgen.setnullhandling(l_context, p_null_handling);
-   
+
     l_xml := dbms_xmlgen.getxmltype(l_context, dbms_xmlgen.none);
 
     dbms_xmlgen.closecontext(l_context);
@@ -30,6 +30,129 @@ create or replace package body oos_transform is
     return l_out;
   end;
 
+  function refcur2csv(p_rc in sys_refcursor) return clob is
+    v_xml1 xmltype;
+    v_xml2 xmltype;
+    -- see: http://stackoverflow.com/questions/14088881/xml-to-csv-conversion-using-xquery
+    v_xquery constant varchar2(32767) := q'[let $nl := codepoints-to-string(10)
+for $i in /ROWSET/ROW
+return concat(string-join(data($i/*), ','), $nl)
+]';
+  begin
+    v_xml1 := refcur2xml(p_rc);
+    v_xml2 := xquery(v_xml1, v_xquery);
+    return v_xml2.getclobval();
+  end;
+
+  function refcur2csv2(
+    p_rc        in out sys_refcursor
+   ,p_separator in varchar2 default ','
+   ,p_endline   in varchar2 default chr(10)||chr(13)
+   ,p_date_fmt  in varchar2 default 'YYYY-MM-DD HH24:MI:SS'
+  ) return clob is
+    v_lob clob;
+    v_cur_id pls_integer;
+    v_col_count pls_integer;
+    v_col_desc dbms_sql.desc_tab3;
+
+    v_var_varchar2 varchar2(32767);
+    v_var_number number;
+    v_var_date date;
+
+    v_buf varchar2(32767);
+
+    procedure print(p_rec in dbms_sql.desc_rec3) is
+    begin
+      dbms_output.new_line;
+      dbms_output.put_line('---------------------');
+      dbms_output.put_line('col_type            = '
+                           || p_rec.col_type);
+      dbms_output.put_line('col_maxlen          = '
+                           || p_rec.col_max_len);
+      dbms_output.put_line('col_name            = '
+                           || p_rec.col_name);
+      dbms_output.put_line('col_name_len        = '
+                           || p_rec.col_name_len);
+      dbms_output.put_line('col_schema_name     = '
+                           || p_rec.col_schema_name);
+      dbms_output.put_line('col_schema_name_len = '
+                           || p_rec.col_schema_name_len);
+      dbms_output.put_line('col_precision       = '
+                           || p_rec.col_precision);
+      dbms_output.put_line('col_scale           = '
+                           || p_rec.col_scale);
+      dbms_output.put_line('col_charsetid       = '
+                           || p_rec.col_charsetid);
+      dbms_output.put_line('col_charsetform     = '
+                           || p_rec.col_charsetform);
+      dbms_output.put_line('col_type_name       = '
+                           || p_rec.col_type_name);
+      dbms_output.put_line('col_type_name_len   = '
+                           || p_rec.col_type_name_len);
+      dbms_output.put     ('col_null_ok         = ');
+      if (p_rec.col_null_ok) then
+        dbms_output.put_line('true');
+      else
+        dbms_output.put_line('false');
+      end if;
+    end;
+  begin
+    dbms_lob.createtemporary(lob_loc => v_lob,
+                             cache   => false,
+                             dur     => dbms_lob.call);
+
+    v_cur_id := dbms_sql.to_cursor_number(p_rc);
+
+    dbms_sql.describe_columns3(v_cur_id, v_col_count, v_col_desc);
+
+    for i in 1 .. v_col_count
+    loop
+      -- print(v_col_desc(i));
+      case v_col_desc(i).col_type
+        -- TODO: where to find all the numbers ?
+        when  1 then dbms_sql.define_column(v_cur_id, i, v_var_varchar2, 32767);
+        when  2 then dbms_sql.define_column(v_cur_id, i, v_var_number);
+        when 12 then dbms_sql.define_column(v_cur_id, i, v_var_date);
+        when 96 then dbms_sql.define_column(v_cur_id, i, v_var_varchar2, 32767);
+        else         dbms_sql.define_column(v_cur_id, i, v_var_varchar2, 32767);
+      end case;
+    end loop;
+
+    -- TODO: A (double) quote character in a field must be represented by two
+    -- (double) quote characters.
+    while dbms_sql.fetch_rows(v_cur_id) > 0
+    loop
+      for i in 1 .. v_col_count
+      loop
+        case v_col_desc(i).col_type
+          when  2 then
+            dbms_sql.column_value(v_cur_id, i, v_var_number);
+            -- dbms_output.put_line('v_var_number = ' || v_var_number);
+            v_buf := to_char(v_var_number); -- TODO format model
+          when 12 then
+            dbms_sql.column_value(v_cur_id, i, v_var_date);
+            -- dbms_output.put_line('v_var_date = ' || v_var_date);
+            v_buf := '"' || to_char(v_var_date, p_date_fmt) || '"';
+          when 96 then
+            dbms_sql.column_value(v_cur_id, i, v_var_varchar2);
+            -- dbms_output.put_line('v_var_varchar2 = ' || v_var_varchar2);
+            v_buf := '"' || v_var_varchar2 || '"';
+          else
+            dbms_sql.column_value(v_cur_id, i, v_var_varchar2);
+            -- dbms_output.put_line('v_var_varchar2 = ' || v_var_varchar2);
+            v_buf := '"' || v_var_varchar2 || '"';
+        end case;
+        if i < v_col_count
+        then
+          v_buf := v_buf || p_separator;
+        end if;
+        dbms_lob.writeappend(v_lob, length(v_buf), v_buf);
+      end loop;
+      dbms_lob.writeappend(v_lob, length(p_endline), p_endline);
+    end loop;
+
+    return v_lob;
+  end;
 end;
 /
 show errors

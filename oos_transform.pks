@@ -15,6 +15,19 @@ create or replace package oos_transform is
   -- transforms a canonical oracle xml with user provided xquery
   function xquery(p_in in xmltype, p_trans in varchar2) return xmltype;
 
+  -- transforms a ref cursor to csv (xquery implementation)
+  function refcur2csv(
+    p_rc in sys_refcursor
+  ) return clob;
+
+  -- transforms a ref cursor to csv (dbms_sql implementation)
+  function refcur2csv2(
+    p_rc        in out sys_refcursor
+   ,p_separator in varchar2 default ','
+   ,p_endline   in varchar2 default chr(10)||chr(13)
+   ,p_date_fmt  in varchar2 default 'YYYY-MM-DD HH24:MI:SS'
+  ) return clob;
+
 end;
 /
 show errors
