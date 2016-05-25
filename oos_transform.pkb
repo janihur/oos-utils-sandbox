@@ -30,25 +30,51 @@ create or replace package body oos_transform is
     return l_out;
   end;
 
-  function refcur2csv(p_rc in sys_refcursor) return clob is
+  function refcur2csv(
+    p_rc in sys_refcursor
+   ,p_column_names in boolean default false
+  ) return clob is
     v_xml1 xmltype;
     v_xml2 xmltype;
     -- see: http://stackoverflow.com/questions/14088881/xml-to-csv-conversion-using-xquery
-    v_xquery constant varchar2(32767) := q'[let $nl := codepoints-to-string(10)
-for $i in /ROWSET/ROW
-return concat(string-join(data($i/*), ','), $nl)
+    v_xquery constant varchar2(32767) := q'[
+let $nl := codepoints-to-string(10),
+    $q := codepoints-to-string(34),
+    $nodes := /ROWSET/ROW
+for $i in $nodes
+   return concat(string-join($i/*/concat($q, normalize-space(replace(data(.), $q, concat($q,$q))), $q), ','),$nl)
+]';
+    v_xquery_names constant varchar2(32767) := q'[
+let $nl := codepoints-to-string(10),
+    $q := codepoints-to-string(34),
+    $nodes := /ROWSET/ROW
+    return concat(
+              string-join(distinct-values($nodes/*/concat($q, name(.), $q)), ','),
+              $nl,
+              string-join(
+                 for $i in $nodes
+                    return string-join($i/*/concat($q, normalize-space(replace(data(.), $q, concat($q,$q))), $q),','),$nl),
+              $nl
+           )
 ]';
   begin
     v_xml1 := refcur2xml(p_rc);
-    v_xml2 := xquery(v_xml1, v_xquery);
-    return v_xml2.getclobval();
+
+    if p_column_names
+    then
+      v_xml2 := xquery(v_xml1, v_xquery_names);
+    else
+      v_xml2 := xquery(v_xml1, v_xquery);
+    end if;
+    return entity_decode(v_xml2.getclobval());
   end;
 
   function refcur2csv2(
-    p_rc        in out sys_refcursor
-   ,p_separator in varchar2 default ','
-   ,p_endline   in varchar2 default chr(10)||chr(13)
-   ,p_date_fmt  in varchar2 default 'YYYY-MM-DD HH24:MI:SS'
+    p_rc           in out sys_refcursor
+   ,p_column_names in boolean default false
+   ,p_separator    in varchar2 default ','
+   ,p_endline      in varchar2 default chr(13)||chr(10)
+   ,p_date_fmt     in varchar2 default 'YYYY-MM-DD HH24:MI:SS'
   ) return clob is
     v_lob clob;
     v_cur_id pls_integer;
@@ -105,11 +131,26 @@ return concat(string-join(data($i/*), ','), $nl)
 
     dbms_sql.describe_columns3(v_cur_id, v_col_count, v_col_desc);
 
+    if p_column_names
+    then
+      for i in 1 .. v_col_count
+      loop
+        v_buf := '"' || v_col_desc(i).col_name || '"';
+        if i < v_col_count
+        then
+          v_buf := v_buf || p_separator;
+        end if;
+        dbms_lob.writeappend(v_lob, length(v_buf), v_buf);
+      end loop;
+      dbms_lob.writeappend(v_lob, length(p_endline), p_endline);
+    end if;
+
     for i in 1 .. v_col_count
     loop
       -- print(v_col_desc(i));
       case v_col_desc(i).col_type
         -- TODO: where to find all the numbers ?
+        -- See https://docs.oracle.com/cd/B10501_01/server.920/a96540/sql_elements2a.htm#45504
         when  1 then dbms_sql.define_column(v_cur_id, i, v_var_varchar2, 32767);
         when  2 then dbms_sql.define_column(v_cur_id, i, v_var_number);
         when 12 then dbms_sql.define_column(v_cur_id, i, v_var_date);
@@ -120,6 +161,8 @@ return concat(string-join(data($i/*), ','), $nl)
 
     -- TODO: A (double) quote character in a field must be represented by two
     -- (double) quote characters.
+    -- CSV doesn't care about single quote characters. Only replace double quotes
+    -- using the regexp_replace below.
     while dbms_sql.fetch_rows(v_cur_id) > 0
     loop
       for i in 1 .. v_col_count
@@ -136,11 +179,11 @@ return concat(string-join(data($i/*), ','), $nl)
           when 96 then
             dbms_sql.column_value(v_cur_id, i, v_var_varchar2);
             -- dbms_output.put_line('v_var_varchar2 = ' || v_var_varchar2);
-            v_buf := '"' || v_var_varchar2 || '"';
+            v_buf := '"' || regexp_replace(v_var_varchar2, '(' || chr(34) || ')', '\1' || '\1') || '"';
           else
             dbms_sql.column_value(v_cur_id, i, v_var_varchar2);
             -- dbms_output.put_line('v_var_varchar2 = ' || v_var_varchar2);
-            v_buf := '"' || v_var_varchar2 || '"';
+            v_buf := '"' || regexp_replace(v_var_varchar2, '(' || chr(34) || ')', '\1' || '\1') || '"';
         end case;
         if i < v_col_count
         then
@@ -152,6 +195,12 @@ return concat(string-join(data($i/*), ','), $nl)
     end loop;
 
     return v_lob;
+  end;
+
+  function entity_decode(p_in clob) return clob
+  is
+  begin
+    return dbms_xmlgen.convert(p_in, dbms_xmlgen.entity_decode);
   end;
 end;
 /

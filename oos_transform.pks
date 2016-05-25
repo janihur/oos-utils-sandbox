@@ -18,15 +18,20 @@ create or replace package oos_transform is
   -- transforms a ref cursor to csv (xquery implementation)
   function refcur2csv(
     p_rc in sys_refcursor
+   ,p_column_names in boolean default false
   ) return clob;
 
   -- transforms a ref cursor to csv (dbms_sql implementation)
   function refcur2csv2(
     p_rc        in out sys_refcursor
+   ,p_column_names in boolean default false
    ,p_separator in varchar2 default ','
-   ,p_endline   in varchar2 default chr(10)||chr(13)
+   ,p_endline   in varchar2 default chr(13)||chr(10)
    ,p_date_fmt  in varchar2 default 'YYYY-MM-DD HH24:MI:SS'
   ) return clob;
+
+  -- decodes any encoded xml entities (e.g. double quotes and ampersand)
+  function entity_decode(p_in clob) return clob;
 
 end;
 /
