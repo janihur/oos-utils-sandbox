@@ -52,7 +52,7 @@ declare
 </table>]';
 begin
   open v_rc for
-    select level, dummy from dual
+    select level, q'[test"quotes'and,commas]' dummy, sysdate from dual
     connect by level < 4
   ;
 
@@ -60,7 +60,7 @@ begin
   dbms_output.put_line(v_xml1.getclobval());
 
   v_xml2 := oos_transform.xslt(v_xml1, v_xslt);
-  dbms_output.put_line(v_xml2.getclobval());
+  dbms_output.put_line(oos_transform.entity_decode(v_xml2.getclobval()));
 
   v_xml2 := oos_transform.xquery(v_xml1, v_xquery);
   dbms_output.put_line(v_xml2.getclobval());
@@ -71,10 +71,10 @@ declare
   v_rc sys_refcursor;
 begin
   open v_rc for
-    select level, dummy, sysdate from dual
+    select level, q'[test"quotes'and,commas]' dummy, sysdate from dual
     connect by level < 4
   ;
-  dbms_output.put_line(oos_transform.refcur2csv(v_rc));
+  dbms_output.put_line(oos_transform.refcur2csv(v_rc, true));
 end;
 /
 
@@ -82,7 +82,7 @@ declare
   v_rc sys_refcursor;
 begin
   open v_rc for
-    select level, dummy, sysdate from dual
+    select level, q'[test"quotes'and,commas]' dummy, sysdate from dual
     connect by level < 4
   ;
   dbms_output.put_line(oos_transform.refcur2csv2(v_rc));
