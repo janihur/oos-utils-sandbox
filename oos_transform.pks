@@ -33,6 +33,16 @@ create or replace package oos_transform is
   -- decodes any encoded xml entities (e.g. double quotes and ampersand)
   function entity_decode(p_in clob) return clob;
 
+  -- transforms a ref cursor to an html table (xquery implementation)
+  function refcur2html(
+    p_rc in sys_refcursor
+  ) return clob;
+
+  -- transforms a ref cursor to json (xslt implementation)
+  function refcur2json(
+    p_rc in sys_refcursor
+  ) return clob;
+
 end;
 /
 show errors
