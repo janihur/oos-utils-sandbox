@@ -86,42 +86,6 @@ create or replace package body oos_transform is
     v_var_date date;
 
     v_buf varchar2(32767);
-
-    procedure print(p_rec in dbms_sql.desc_rec3) is
-    begin
-      dbms_output.new_line;
-      dbms_output.put_line('---------------------');
-      dbms_output.put_line('col_type            = '
-                           || p_rec.col_type);
-      dbms_output.put_line('col_maxlen          = '
-                           || p_rec.col_max_len);
-      dbms_output.put_line('col_name            = '
-                           || p_rec.col_name);
-      dbms_output.put_line('col_name_len        = '
-                           || p_rec.col_name_len);
-      dbms_output.put_line('col_schema_name     = '
-                           || p_rec.col_schema_name);
-      dbms_output.put_line('col_schema_name_len = '
-                           || p_rec.col_schema_name_len);
-      dbms_output.put_line('col_precision       = '
-                           || p_rec.col_precision);
-      dbms_output.put_line('col_scale           = '
-                           || p_rec.col_scale);
-      dbms_output.put_line('col_charsetid       = '
-                           || p_rec.col_charsetid);
-      dbms_output.put_line('col_charsetform     = '
-                           || p_rec.col_charsetform);
-      dbms_output.put_line('col_type_name       = '
-                           || p_rec.col_type_name);
-      dbms_output.put_line('col_type_name_len   = '
-                           || p_rec.col_type_name_len);
-      dbms_output.put     ('col_null_ok         = ');
-      if (p_rec.col_null_ok) then
-        dbms_output.put_line('true');
-      else
-        dbms_output.put_line('false');
-      end if;
-    end;
   begin
     dbms_lob.createtemporary(lob_loc => v_lob,
                              cache   => false,
@@ -147,9 +111,8 @@ create or replace package body oos_transform is
 
     for i in 1 .. v_col_count
     loop
-      -- print(v_col_desc(i));
       case v_col_desc(i).col_type
-        -- TODO: where to find all the numbers ?
+        -- Numeric codes for Oracle built-in data types
         -- See https://docs.oracle.com/cd/B10501_01/server.920/a96540/sql_elements2a.htm#45504
         when  1 then dbms_sql.define_column(v_cur_id, i, v_var_varchar2, 32767);
         when  2 then dbms_sql.define_column(v_cur_id, i, v_var_number);
@@ -159,10 +122,8 @@ create or replace package body oos_transform is
       end case;
     end loop;
 
-    -- TODO: A (double) quote character in a field must be represented by two
+    -- A (double) quote character in a field must be represented by two
     -- (double) quote characters.
-    -- CSV doesn't care about single quote characters. Only replace double quotes
-    -- using the regexp_replace below.
     while dbms_sql.fetch_rows(v_cur_id) > 0
     loop
       for i in 1 .. v_col_count
@@ -170,19 +131,15 @@ create or replace package body oos_transform is
         case v_col_desc(i).col_type
           when  2 then
             dbms_sql.column_value(v_cur_id, i, v_var_number);
-            -- dbms_output.put_line('v_var_number = ' || v_var_number);
             v_buf := to_char(v_var_number); -- TODO format model
           when 12 then
             dbms_sql.column_value(v_cur_id, i, v_var_date);
-            -- dbms_output.put_line('v_var_date = ' || v_var_date);
             v_buf := '"' || to_char(v_var_date, p_date_fmt) || '"';
           when 96 then
             dbms_sql.column_value(v_cur_id, i, v_var_varchar2);
-            -- dbms_output.put_line('v_var_varchar2 = ' || v_var_varchar2);
             v_buf := '"' || regexp_replace(v_var_varchar2, '(' || chr(34) || ')', '\1' || '\1') || '"';
           else
             dbms_sql.column_value(v_cur_id, i, v_var_varchar2);
-            -- dbms_output.put_line('v_var_varchar2 = ' || v_var_varchar2);
             v_buf := '"' || regexp_replace(v_var_varchar2, '(' || chr(34) || ')', '\1' || '\1') || '"';
         end case;
         if i < v_col_count
@@ -195,12 +152,6 @@ create or replace package body oos_transform is
     end loop;
 
     return v_lob;
-  end;
-
-  function entity_decode(p_in clob) return clob
-  is
-  begin
-    return dbms_xmlgen.convert(p_in, dbms_xmlgen.entity_decode);
   end;
 
   function refcur2html(
@@ -411,6 +362,12 @@ create or replace package body oos_transform is
     v_xml1 := refcur2xml(p_rc);
     v_xml2 := xslt(v_xml1, v_json_xslt);
     return entity_decode(v_xml2.getclobval());
+  end;
+
+  function entity_decode(p_in clob) return clob
+  is
+  begin
+    return dbms_xmlgen.convert(p_in, dbms_xmlgen.entity_decode);
   end;
 end;
 /

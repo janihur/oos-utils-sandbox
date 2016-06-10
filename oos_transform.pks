@@ -30,9 +30,6 @@ create or replace package oos_transform is
    ,p_date_fmt  in varchar2 default 'YYYY-MM-DD HH24:MI:SS'
   ) return clob;
 
-  -- decodes any encoded xml entities (e.g. double quotes and ampersand)
-  function entity_decode(p_in clob) return clob;
-
   -- transforms a ref cursor to an html table (xquery implementation)
   function refcur2html(
     p_rc in sys_refcursor
@@ -42,6 +39,9 @@ create or replace package oos_transform is
   function refcur2json(
     p_rc in sys_refcursor
   ) return clob;
+
+  -- decodes any encoded xml entities (e.g. &quot; -> ")
+  function entity_decode(p_in clob) return clob;
 
 end;
 /
