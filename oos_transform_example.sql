@@ -88,3 +88,25 @@ begin
   dbms_output.put_line(oos_transform.refcur2csv2(v_rc));
 end;
 /
+
+declare
+  v_rc sys_refcursor;
+begin
+  open v_rc for
+    select level, q'[test"quotes'and,commas]' dummy, sysdate from dual
+    connect by level < 4
+  ;
+  dbms_output.put_line(oos_transform.refcur2html(v_rc));
+end;
+/
+
+declare
+  v_rc sys_refcursor;
+begin
+  open v_rc for
+    select level, q'[test"quotes'and,commas]' dummy, sysdate from dual
+    connect by level < 4
+  ;
+  dbms_output.put_line(oos_transform.refcur2json(v_rc));
+end;
+/
